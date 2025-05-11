@@ -5,6 +5,7 @@ import subprocess
 import json
 from datetime import datetime, timedelta
 from urllib.parse import urlparse
+from zipfile import ZipFile
 from telethon import TelegramClient, events, Button
 from mutagen import File
 
@@ -14,15 +15,17 @@ api_hash = 'a08b1ed3365fa3b04bcf2bcbf71aff4d'
 session_name = 'beatport_downloader'
 
 # Regular expressions
-beatport_pattern = '^https:\/\/www\.beatport\.com\/track\/[\w -]+\/\d+$'
-crates_pattern = '^https:\/\/crates\.co\/track\/[\w -]+\/\d+$'
+track_pattern = r'^https:\/\/www\.beatport\.com\/track\/[\w\-]+\/(\d+)$'
+album_pattern = r'^https:\/\/www\.beatport\.com\/release\/[\w\-]+\/(\d+)$'
+crates_track_pattern = r'^https:\/\/crates\.co\/track\/[\w\-]+\/(\d+)$'
+crates_album_pattern = r'^https:\/\/crates\.co\/release\/[\w\-]+\/(\d+)$'
 
 # State dictionary
 state = {}
 
 # Admin IDs and payment URL
-ADMIN_IDS = [616584208, 731116951]  # Replace with your Telegram user IDs
-PAYMENT_URL = "https://buymeacoffee.com/zackant"  # Replace with your custom payment URL
+ADMIN_IDS = [616584208, 731116951]
+PAYMENT_URL = "https://buymeacoffee.com/zackant"
 
 # User data file
 USERS_FILE = 'users.json'
@@ -39,7 +42,7 @@ def save_users(users):
 
 def is_user_allowed(user_id):
     if user_id in ADMIN_IDS:
-        return True  # Admins have unlimited access
+        return True
     users = load_users()
     user = users.get(str(user_id), {})
     expiry = user.get('expiry')
@@ -49,12 +52,12 @@ def is_user_allowed(user_id):
 
 def increment_download(user_id):
     if user_id in ADMIN_IDS:
-        return  # Don't count downloads for admins
+        return
     users = load_users()
     uid = str(user_id)
     if uid not in users:
         users[uid] = {"downloads": 0}
-    users[uid]["downloads"] = users[uid].get("downloads", 0) + 1
+    users[uid]["downloads"] += 1
     save_users(users)
 
 def whitelist_user(user_id):
@@ -62,17 +65,30 @@ def whitelist_user(user_id):
     users[str(user_id)] = {"expiry": (datetime.utcnow() + timedelta(days=30)).strftime('%Y-%m-%d')}
     save_users(users)
 
+def sanitize_metadata(text):
+    return text.replace(";", ", ").strip()
+
+def rename_by_metadata(filepath):
+    audio = File(filepath, easy=True)
+    if not audio:
+        return filepath
+    artist = sanitize_metadata(", ".join(audio.get('artist', ['Unknown Artist'])))
+    title = sanitize_metadata(" ".join(audio.get('title', ['Unknown Title'])))
+    new_filename = f"{artist} - {title}{os.path.splitext(filepath)[1]}"
+    new_filepath = os.path.join(os.path.dirname(filepath), new_filename)
+    os.rename(filepath, new_filepath)
+    return new_filepath
+
 # Telegram client
 client = TelegramClient(session_name, api_id, api_hash)
 
 @client.on(events.NewMessage(pattern='/start'))
 async def start_handler(event):
-    await event.reply("Hi! I'm Beatport Track Downloader using MTProto API.\n\n"
-                      "Commands:\n"
-                      "/download <track_url> - Download a track from Beatport or Crates.co.\n\n"
+    await event.reply("Hi! I'm Beatport Track Downloader.\n\n"
+                      "Use /download <track_or_album_url>\n\n"
                       "Example:\n"
-                      "/download https://www.beatport.com/track/take-me/17038421\n"
-                      "/download https://crates.co/track/take-me/17038421")
+                      "/download https://www.beatport.com/track/love-on-me/8557778\n"
+                      "/download https://www.beatport.com/release/love-on-me-remixes/1883751")
 
 @client.on(events.NewMessage(pattern='/add'))
 async def add_user_handler(event):
@@ -98,71 +114,80 @@ async def download_handler(event):
             return
 
         input_text = event.message.text.split(maxsplit=1)[1]
-        is_beatport = re.match(rf'{beatport_pattern}', input_text)
-        is_crates = re.match(rf'{crates_pattern}', input_text)
+        is_track = re.match(track_pattern, input_text) or re.match(crates_track_pattern, input_text)
+        is_album = re.match(album_pattern, input_text) or re.match(crates_album_pattern, input_text)
 
-        if is_beatport or is_crates:
-            if is_crates:
-                input_text = input_text.replace('crates.co', 'www.beatport.com')
+        if is_track or is_album:
+            if "crates.co" in input_text:
+                input_text = input_text.replace("crates.co", "www.beatport.com")
 
             state[event.chat_id] = input_text
 
-            await event.reply("Please choose the format:", buttons=[
-                [Button.inline("FLAC (16 Bit)", b"flac"), Button.inline("MP3 (320K)", b"mp3")]
+            await event.reply("Choose output format and type:", buttons=[
+                [Button.inline("FLAC - Individual", b"flac_individual"), Button.inline("MP3 - Individual", b"mp3_individual")],
+                [Button.inline("FLAC - ZIP", b"flac_zip"), Button.inline("MP3 - ZIP", b"mp3_zip")]
             ])
         else:
-            await event.reply('Invalid track link.\nPlease enter a valid track link.')
+            await event.reply('Invalid Beatport/Crates link.')
     except Exception as e:
-        await event.reply(f"An error occurred: {e}")
+        await event.reply(f"Error: {e}")
 
 @client.on(events.CallbackQuery)
 async def callback_query_handler(event):
     try:
-        format_choice = event.data.decode('utf-8')
+        callback_data = event.data.decode('utf-8')
+        fmt, send_as = callback_data.split("_")
         input_text = state.get(event.chat_id)
-        if not input_text:
-            await event.edit("No URL found. Please start the process again using /download.")
-            return
 
-        await event.edit(f"You selected {format_choice.upper()}. Downloading the file...")
+        await event.edit("Downloading and processing your request...")
 
-        url = urlparse(input_text)
-        components = url.path.split('/')
+        os.system(f'python orpheus.py "{input_text}"')
 
-        os.system(f'python orpheus.py {input_text}')
+        match = re.search(r'\/(\d+)$', input_text)
+        release_id = match.group(1)
 
-        download_dir = f'downloads/{components[-1]}'
-        filename = os.listdir(download_dir)[0]
-        filepath = f'{download_dir}/{filename}'
+        parent_folder = os.path.join("downloads", release_id)
 
-        converted_filepath = f'{download_dir}/{filename}.{format_choice}'
-        if format_choice == 'flac':
-            subprocess.run(['ffmpeg', '-i', filepath, converted_filepath])
-        elif format_choice == 'mp3':
-            subprocess.run(['ffmpeg', '-i', filepath, '-b:a', '320k', converted_filepath])
+        if "track" in input_text:
+            files = [f for f in os.listdir(parent_folder) if f.lower().endswith('.flac')]
+            if files:
+                flac_path = os.path.join(parent_folder, files[0])
+                converted_path = flac_path.replace(".flac", f".{fmt}")
+                subprocess.run(['ffmpeg', '-i', flac_path, converted_path])
+                converted_path = rename_by_metadata(converted_path)
+                await client.send_file(event.chat_id, converted_path)
+                increment_download(event.chat_id)
+        else:
+            subdirs = [d for d in os.listdir(parent_folder) if os.path.isdir(os.path.join(parent_folder, d))]
+            if not subdirs:
+                await event.reply("Album folder not found.")
+                return
+            album_folder = os.path.join(parent_folder, subdirs[0])
+            files = [f for f in os.listdir(album_folder) if f.lower().endswith('.flac')]
+            converted_files = []
 
-        audio = File(converted_filepath, easy=True)
-        artist = audio.get('artist', ['Unknown Artist'])[0]
-        title = audio.get('title', ['Unknown Title'])[0]
+            for flac_file in files:
+                flac_path = os.path.join(album_folder, flac_file)
+                converted_path = flac_path.replace(".flac", f".{fmt}")
+                subprocess.run(['ffmpeg', '-i', flac_path, converted_path])
+                converted_path = rename_by_metadata(converted_path)
+                converted_files.append(converted_path)
 
-        for field in ['artist', 'title', 'album', 'genre']:
-            if field in audio:
-                audio[field] = [value.replace(";", ", ") for value in audio[field]]
-        audio.save()
+            if send_as == "zip":
+                zip_name = subdirs[0].strip() + ".zip"
+                zip_path = os.path.join(album_folder, zip_name)
+                with ZipFile(zip_path, 'w') as zipf:
+                    for file in converted_files:
+                        zipf.write(file, os.path.basename(file))
+                await client.send_file(event.chat_id, zip_path)
+            else:
+                for file in converted_files:
+                    await client.send_file(event.chat_id, file)
 
-        new_filename = f"{artist} - {title}.{format_choice}".replace(";", ", ")
-        new_filepath = f'{download_dir}/{new_filename}'
-
-        os.rename(converted_filepath, new_filepath)
-
-        await client.send_file(event.chat_id, new_filepath)
-
-        shutil.rmtree(download_dir)
-
-        increment_download(event.chat_id)
+            increment_download(event.chat_id)
         del state[event.chat_id]
     except Exception as e:
-        await event.reply(f"An error occurred during conversion: {e}")
+        await event.reply(f"Error in callback: {e}")
 
 async def main():
     async with client:
