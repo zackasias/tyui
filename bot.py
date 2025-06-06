@@ -8,24 +8,17 @@ from urllib.parse import urlparse
 from telethon import TelegramClient, events, Button
 from mutagen import File
 
-# MTProto API credentials
 api_id = '10074048'
 api_hash = 'a08b1ed3365fa3b04bcf2bcbf71aff4d'
 session_name = 'beatport_downloader'
 
-# Regular expressions
 beatport_track_pattern = r'^https:\/\/www\.beatport\.com\/track\/[\w\-]+\/\d+$'
 beatport_album_pattern = r'^https:\/\/www\.beatport\.com\/release\/[\w\-]+\/\d+$'
 crates_pattern = r'^https:\/\/crates\.co\/track\/[\w\-]+\/\d+$'
 
-# State dictionary
 state = {}
-
-# Admin IDs and payment URL
-ADMIN_IDS = [616584208, 731116951]  # Replace with your Telegram user IDs
-PAYMENT_URL = "https://ko-fi.com/zackant"  # Replace with your custom payment URL
-
-# User data file
+ADMIN_IDS = [616584208, 731116951]
+PAYMENT_URL = "https://ko-fi.com/zackant"
 USERS_FILE = 'users.json'
 
 def load_users():
@@ -63,16 +56,13 @@ def whitelist_user(user_id):
     users[str(user_id)] = {"expiry": (datetime.utcnow() + timedelta(days=30)).strftime('%Y-%m-%d')}
     save_users(users)
 
-# Telegram client
 client = TelegramClient(session_name, api_id, api_hash)
 
 @client.on(events.NewMessage(pattern='/start'))
 async def start_handler(event):
     await event.reply("Hi! I'm Beatport Track Downloader.\n\n"
                       "Commands:\n"
-                      "/download <track_or_album_url> - Download from Beatport or Crates.co.\n\n"
-                      "Example:\n"
-                      "/download https://www.beatport.com/track/take-me/17038421\n")
+                      "/download <track_or_album_url> - Download from Beatport or Crates.co.\n")
 
 @client.on(events.NewMessage(pattern='/add'))
 async def add_user_handler(event):
@@ -139,22 +129,16 @@ async def callback_query_handler(event):
         os.system(f'python orpheus.py {input_text}')
 
         if content_type == "album":
-            album_root = f'downloads/{release_id}'
-            if not os.path.isdir(album_root):
-                await client.send_message(event.chat_id, "Download failed: Album directory not found.")
-                return
+            root_path = f'downloads/{release_id}'
 
-            subdirs = os.listdir(album_root)
-            if not subdirs:
-                await client.send_message(event.chat_id, "Album folder is empty.")
-                return
-
-            album_folder = os.path.join(album_root, subdirs[0])
-            files = os.listdir(album_folder)
+            # Check if it's a single-track album
+            flac_files = [f for f in os.listdir(root_path) if f.lower().endswith('.flac')]
+            album_path = root_path if flac_files else os.path.join(root_path, os.listdir(root_path)[0])
+            files = os.listdir(album_path)
 
             for filename in files:
                 if filename.lower().endswith('.flac'):
-                    input_path = os.path.join(album_folder, filename)
+                    input_path = os.path.join(album_path, filename)
                     output_path = f"{input_path}.{format_choice}"
 
                     if format_choice == 'flac':
@@ -172,22 +156,21 @@ async def callback_query_handler(event):
                     audio.save()
 
                     final_name = f"{artist} - {title}.{format_choice}".replace(";", ", ")
-                    final_path = os.path.join(album_folder, final_name)
+                    final_path = os.path.join(album_path, final_name)
                     os.rename(output_path, final_path)
 
                     await client.send_file(event.chat_id, final_path)
 
             for file in files:
                 if file.lower().startswith('cover') and file.lower().endswith(('.jpg', '.png', '.jpeg')):
-                    await client.send_file(event.chat_id, os.path.join(album_folder, file))
+                    await client.send_file(event.chat_id, os.path.join(album_path, file))
                     break
 
-            shutil.rmtree(album_root)
+            shutil.rmtree(root_path)
             increment_download(event.chat_id)
             del state[event.chat_id]
 
         else:
-            # Single track logic (unchanged)
             download_dir = f'downloads/{components[-1]}'
             filename = os.listdir(download_dir)[0]
             filepath = f'{download_dir}/{filename}'
