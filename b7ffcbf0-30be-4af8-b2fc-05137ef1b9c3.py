@@ -87,10 +87,9 @@ def remove_user(user_id):
 
 client = TelegramClient(session_name, api_id, api_hash)
 
-# === START HANDLER WITH IMAGE & BUTTONS ===
 @client.on(events.NewMessage(pattern='/start'))
 async def start_handler(event):
-    banner_path = 'banner.gif'  # Your banner image/gif in working dir
+    banner_path = 'banner.gif'
     caption = (
         "🎧 Hey DJ! 🎶\n\n"
         "Welcome to Beatport Downloader Bot – your assistant for downloading full Beatport tracks & albums.\n\n"
@@ -196,7 +195,6 @@ async def callback_query_handler(event):
         components = url.path.split('/')
         release_id = components[-1]
 
-        # Run your external download script (orpheus.py)
         os.system(f'python orpheus.py {input_text}')
 
         if content_type == "album":
@@ -246,11 +244,14 @@ async def callback_query_handler(event):
             for filename in files:
                 if filename.lower().endswith('.flac'):
                     input_path = os.path.join(album_path, filename)
-                    output_path = f"{input_path}.{format_choice}"
-                    if format_choice == 'flac':
-                        subprocess.run(['ffmpeg', '-i', input_path, output_path])
-                    elif format_choice == 'mp3':
-                        subprocess.run(['ffmpeg', '-i', input_path, '-b:a', '320k', output_path])
+                    if input_path.lower().endswith(f".{format_choice}"):
+                        output_path = input_path
+                    else:
+                        output_path = f"{os.path.splitext(input_path)[0]}.{format_choice}"
+                        if format_choice == 'flac':
+                            subprocess.run(['ffmpeg', '-i', input_path, output_path])
+                        elif format_choice == 'mp3':
+                            subprocess.run(['ffmpeg', '-i', input_path, '-b:a', '320k', output_path])
 
                     audio = File(output_path, easy=True)
                     artist = audio.get('artist', ['Unknown Artist'])[0]
@@ -272,12 +273,15 @@ async def callback_query_handler(event):
             download_dir = f'downloads/{components[-1]}'
             filename = os.listdir(download_dir)[0]
             filepath = f'{download_dir}/{filename}'
-            converted_filepath = f'{download_dir}/{filename}.{format_choice}'
 
-            if format_choice == 'flac':
-                subprocess.run(['ffmpeg', '-i', filepath, converted_filepath])
-            elif format_choice == 'mp3':
-                subprocess.run(['ffmpeg', '-i', filepath, '-b:a', '320k', converted_filepath])
+            if filepath.lower().endswith(f".{format_choice}"):
+                converted_filepath = filepath
+            else:
+                converted_filepath = f'{os.path.splitext(filepath)[0]}.{format_choice}'
+                if format_choice == 'flac':
+                    subprocess.run(['ffmpeg', '-i', filepath, converted_filepath])
+                elif format_choice == 'mp3':
+                    subprocess.run(['ffmpeg', '-i', filepath, '-b:a', '320k', converted_filepath])
 
             audio = File(converted_filepath, easy=True)
             artist = audio.get('artist', ['Unknown Artist'])[0]
@@ -297,7 +301,6 @@ async def callback_query_handler(event):
     except Exception as e:
         await event.reply(f"An error occurred during conversion: {e}")
 
-# === NEW COMMAND: /totalusers ===
 @client.on(events.NewMessage(pattern='/totalusers'))
 async def total_users_handler(event):
     if event.sender_id not in ADMIN_IDS:
