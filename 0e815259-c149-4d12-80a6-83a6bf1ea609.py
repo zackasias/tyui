@@ -619,12 +619,87 @@ async def direct_link_trigger(event):
     await event.reply(
         "Please choose the format:",
         buttons=[
-            [Button.inline(" 🎵 FLACC (320 kbps)", b"mp3"),
+            [Button.inline("MP3 (320 kbps)", b"mp3"),
              Button.inline("FLAC (16 Bit)", b"flac")],
             [Button.inline("WAV (Lossless)", b"wav")]
         ]
     )
 
+
+@client.on(events.NewMessage(pattern='/download'))
+async def download_handler(event):
+    try:
+        user_id = event.chat_id
+        input_text = event.message.text.split(maxsplit=1)[1].strip()
+
+        # -------- ACTIVE DOWNLOAD CHECK --------
+        if active_downloads.get(user_id, False):
+            await event.reply("❌ You already have an ongoing download. Please wait for it to finish.")
+            return
+        active_downloads[user_id] = True
+        # ---------------------------------------
+
+        # Check type of Beatport link
+        is_track = re.match(beatport_track_pattern, input_text)
+        is_album = re.match(beatport_album_pattern, input_text)
+        is_playlist = re.match(beatport_playlist_pattern, input_text)
+        is_chart = re.match(beatport_chart_pattern, input_text)
+
+        if is_track or is_album or is_playlist or is_chart:
+            # Determine content type
+            if is_album:
+                content_type = "album"
+            elif is_track:
+                content_type = "track"
+            elif is_playlist:
+                content_type = "playlist"
+            elif is_chart:
+                content_type = "chart"
+
+            # Restrict playlists/charts to whitelisted users
+            if content_type in ["playlist", "chart"]:
+                users = load_users()
+                user = users.get(str(user_id), {})
+                reset_if_needed(user)
+                expiry = user.get("expiry")
+                if not expiry or datetime.strptime(expiry, "%Y-%m-%d") <= datetime.utcnow():
+                    active_downloads[user_id] = False  # RELEASE LOCK
+                    await event.reply(
+                        "🚫 Playlist and chart downloads are available only for premium users.\n"
+                        "Please support with a $5 payment to unlock playlist & chart downloading",
+                        buttons=[Button.url("💳 Pay $5", PAYMENT_URL)]
+                    )
+                    return
+
+            # Check daily limits for free users
+            if content_type in ["album", "track"] and not is_user_allowed(user_id, content_type):
+                active_downloads[user_id] = False  # RELEASE LOCK
+                await event.reply(
+                    "🚫 **Daily Limit Reached!**\n\n"
+                    "👉 Upgrade to **Premium ($5)** for **unlimited downloads** and send the payment proof to @zackantdev",
+                    buttons=[
+                        [Button.url("💳 Pay $5 Here", PAYMENT_URL)],
+                    ]
+                )
+                return
+
+            # Save state and ask format
+            state[event.chat_id] = {"url": input_text, "type": content_type}
+            await event.reply(
+                "Please choose the format:",
+                buttons=[
+                    [Button.inline("MP3 (320 kbps)", b"mp3"),
+                     Button.inline("FLAC (16 Bit)", b"flac")],
+                    [Button.inline("WAV (Lossless)", b"wav")]
+                ]
+            )
+        else:
+            active_downloads[user_id] = False  # RELEASE LOCK
+            await event.reply('Not available')
+
+    except Exception as e:
+        active_downloads[user_id] = False  # RELEASE LOCK ON ERROR
+        await event.reply(f"An error occurred: {e}")
 @client.on(events.CallbackQuery)
 async def callback_query_handler(event):
     try:
