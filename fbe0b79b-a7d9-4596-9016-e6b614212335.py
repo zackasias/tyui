@@ -169,7 +169,6 @@ async def process_queue():
     orpheus_running = False
 
 
-
 async def handle_conversion_and_sending(event, format_choice, input_text, content_type):
     try:
         from urllib.parse import urlparse
@@ -251,17 +250,27 @@ async def handle_conversion_and_sending(event, format_choice, input_text, conten
                 f"<b>\U0001F9E9 BPM:</b> {bpm_str}\n"
             )
 
-            # Send cover if exists
-            cover_file = None
-            for root, _, files in os.walk(main_folder):
-                for f in files:
-                    if f.lower().startswith('cover') and f.lower().endswith(('.jpg', '.jpeg', '.png')):
-                        cover_file = os.path.join(root, f)
-                        break
-            if cover_file:
-                await client.send_file(event.chat_id, cover_file, caption=caption, parse_mode='html')
+            # -----------------------------------------
+            # UPDATED: EMBEDDED COVER SUPPORT (ALBUM)
+            # -----------------------------------------
+            embedded_cover_data, embedded_ext = extract_embedded_cover(flac_files[0])
+            if embedded_cover_data:
+                cover_path = f"{main_folder}/embedded_cover.{embedded_ext}"
+                with open(cover_path, "wb") as img:
+                    img.write(embedded_cover_data)
+                await client.send_file(event.chat_id, cover_path, caption=caption, parse_mode='html')
             else:
-                await event.reply(caption, parse_mode='html')
+                # fallback to folder cover
+                cover_file = None
+                for root, _, files in os.walk(main_folder):
+                    for f in files:
+                        if f.lower().startswith('cover') and f.lower().endswith(('.jpg', '.jpeg', '.png')):
+                            cover_file = os.path.join(root, f)
+                            break
+                if cover_file:
+                    await client.send_file(event.chat_id, cover_file, caption=caption, parse_mode='html')
+                else:
+                    await event.reply(caption, parse_mode='html')
 
             # Convert & send tracks
             for input_path in flac_files:
@@ -310,13 +319,15 @@ async def handle_conversion_and_sending(event, format_choice, input_text, conten
             increment_download(event.chat_id, content_type)
             del state[event.chat_id]
 
+        # -------------------------------
+        # TRACK MODE
+        # -------------------------------
         elif content_type == "track":
             download_dir = f'downloads/{components[-1]}'
             filename = os.listdir(download_dir)[0]
             filepath = f'{download_dir}/{filename}'
             converted_filepath = f'{download_dir}/{filename}.{format_choice}'
 
-            # --- Track caption with Key ---
             audio = File(filepath, easy=True) or {}
             title_name = audio.get('title', ['Unknown Title'])[0]
             artists = ", ".join(audio.get('artist', ['Unknown Artist']))
@@ -338,17 +349,30 @@ async def handle_conversion_and_sending(event, format_choice, input_text, conten
                 f"<b>\U0001F9E9 BPM:</b> {bpm}\n"
             )
 
-            # Send cover if exists
-            cover_file = None
-            for f in os.listdir(download_dir):
-                if f.lower().startswith('cover') and f.lower().endswith(('.jpg', '.jpeg', '.png')):
-                    cover_file = os.path.join(download_dir, f)
-                    break
-            if cover_file:
-                await client.send_file(event.chat_id, cover_file, caption=caption, parse_mode='html')
+            # -----------------------------------------
+            # UPDATED: EMBEDDED COVER SUPPORT (TRACK)
+            # -----------------------------------------
+            embedded_cover_data, embedded_ext = extract_embedded_cover(filepath)
+            if embedded_cover_data:
+                cover_path = f"{download_dir}/embedded_cover.{embedded_ext}"
+                with open(cover_path, "wb") as img:
+                    img.write(embedded_cover_data)
+                await client.send_file(event.chat_id, cover_path, caption=caption, parse_mode='html')
             else:
-                await event.reply(caption, parse_mode='html')
+                cover_file = None
+                for f in os.listdir(download_dir):
+                    if f.lower().startswith('cover') and f.lower().endswith(('.jpg', '.jpeg', '.png')):
+                        cover_file = os.path.join(download_dir, f)
+                        break
 
+                if cover_file:
+                    await client.send_file(event.chat_id, cover_file, caption=caption, parse_mode='html')
+                else:
+                    await event.reply(caption, parse_mode='html')
+
+            # -------------------
+            # CONVERSION REMAINS SAME
+            # -------------------
             if format_choice == 'flac':
                 subprocess.run(['ffmpeg', '-n', '-i', filepath, converted_filepath])
                 audio = File(converted_filepath, easy=True)
