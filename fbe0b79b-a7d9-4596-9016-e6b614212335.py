@@ -28,6 +28,7 @@ state = {}
 ADMIN_IDS = [616584208]
 PAYMENT_URL = "https://ko-fi.com/zackant"
 USERS_FILE = 'users.json'
+WHITELIST_PAGES = {}
 
 def safe_filename(name: str) -> str:
     return re.sub(r'[\/:*?"<>|]', '_', name)
@@ -611,7 +612,6 @@ async def admin_list_handler(event):
         except Exception:
             lines.append(f"• <code>{admin_id}</code> – [Could not fetch username]")
     await event.reply("\n".join(lines), parse_mode='html')
-
 @client.on(events.NewMessage(pattern=r'^/whitelist$'))
 async def whitelist_handler(event):
     if event.sender_id not in ADMIN_IDS:
@@ -622,11 +622,11 @@ async def whitelist_handler(event):
     now = datetime.utcnow()
     premium_users = []
 
-    # Collect active premium users
     for uid, data in users.items():
         expiry_str = data.get("expiry")
         if not expiry_str:
             continue
+
         try:
             expiry_date = datetime.strptime(expiry_str, "%Y-%m-%d")
             if expiry_date > now:
@@ -636,19 +636,67 @@ async def whitelist_handler(event):
                 except Exception:
                     username = "No username"
                 premium_users.append((uid, username, expiry_str))
-        except Exception:
+        except:
             continue
 
-    # Prepare message
     if not premium_users:
         await event.reply("💎 No active Premium users found.")
         return
 
-    text = f"💎 **Total Premium Users:** {len(premium_users)}\n\n"
-    for uid, username, expiry in premium_users:
-        text += f"👤 `{uid}` — {username}\n📆 Expires: {expiry}\n\n"
+    # Build pages (~25 users per page)
+    page_size = 25
+    pages = []
 
-    await event.reply(text.strip(), parse_mode="markdown")
+    for i in range(0, len(premium_users), page_size):
+        chunk = premium_users[i:i + page_size]
+        text = "💎 **Premium Users List**\n"
+        text += f"📄 Page {len(pages)+1}\n\n"
+        for uid, username, expiry in chunk:
+            text += f"👤 `{uid}` — {username}\n📆 Expires: {expiry}\n\n"
+        pages.append(text.strip())
+
+    # Save pages for pagination
+    WHITELIST_PAGES[event.sender_id] = {"pages": pages, "current": 0}
+
+    buttons = [
+        [Button.inline("➡️ Next", data="wl_next")]
+    ] if len(pages) > 1 else None
+
+    await event.reply(pages[0], parse_mode="markdown", buttons=buttons)
+
+@client.on(events.CallbackQuery(pattern=r"wl_(next|prev)"))
+async def whitelist_pagination(event):
+    admin_id = event.sender_id
+
+    if admin_id not in ADMIN_IDS:
+        await event.answer("Not allowed.", alert=True)
+        return
+
+    if admin_id not in WHITELIST_PAGES:
+        await event.answer("Session expired. Send /whitelist again.", alert=True)
+        return
+
+    action = event.data.decode().split("_")[1]
+    session = WHITELIST_PAGES[admin_id]
+
+    if action == "next":
+        if session["current"] < len(session["pages"]) - 1:
+            session["current"] += 1
+    elif action == "prev":
+        if session["current"] > 0:
+            session["current"] -= 1
+
+    buttons = []
+    if session["current"] > 0:
+        buttons.append(Button.inline("⬅️ Previous", data="wl_prev"))
+    if session["current"] < len(session["pages"]) - 1:
+        buttons.append(Button.inline("➡️ Next", data="wl_next"))
+
+    await event.edit(
+        session["pages"][session["current"]],
+        parse_mode="markdown",
+        buttons=[buttons] if buttons else None
+    )
 
 # === NEW COMMAND: /totalusers ===
 @client.on(events.NewMessage(pattern='/totalusers'))
