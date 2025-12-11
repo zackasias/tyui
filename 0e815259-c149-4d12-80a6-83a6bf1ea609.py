@@ -253,9 +253,7 @@ async def handle_conversion_and_sending(event, format_choice, input_text, conten
                 f"<b>\U0001F9E9 BPM:</b> {bpm_str}\n"
             )
 
-            # -----------------------------------------
-            # UPDATED: EMBEDDED COVER SUPPORT (ALBUM)
-            # -----------------------------------------
+            # Embedded cover support
             embedded_cover_data, embedded_ext = extract_embedded_cover(flac_files[0])
             if embedded_cover_data:
                 cover_path = f"{main_folder}/embedded_cover.{embedded_ext}"
@@ -263,7 +261,6 @@ async def handle_conversion_and_sending(event, format_choice, input_text, conten
                     img.write(embedded_cover_data)
                 await client.send_file(event.chat_id, cover_path, caption=caption, parse_mode='html')
             else:
-                # fallback to folder cover
                 cover_file = None
                 for root, _, files in os.walk(main_folder):
                     for f in files:
@@ -288,7 +285,7 @@ async def handle_conversion_and_sending(event, format_choice, input_text, conten
                         if field in audio:
                             audio[field] = [value.replace(";", ", ") for value in audio[field]]
                     audio.save()
-                    final_name = safe_filename(f"{artist} - {title}.{format_choice}".replace(";", ", "))
+                    final_name = safe_filename(f"{artist} - {title}.{format_choice}")
                     final_path = os.path.join(os.path.dirname(input_path), final_name)
                     os.rename(output_path, final_path)
                     await client.send_file(event.chat_id, final_path)
@@ -302,7 +299,7 @@ async def handle_conversion_and_sending(event, format_choice, input_text, conten
                         if field in audio:
                             audio[field] = [value.replace(";", ", ") for value in audio[field]]
                     audio.save()
-                    final_name = safe_filename(f"{artist} - {title}.{format_choice}".replace(";", ", "))
+                    final_name = safe_filename(f"{artist} - {title}.{format_choice}")
                     final_path = os.path.join(os.path.dirname(input_path), final_name)
                     os.rename(output_path, final_path)
                     await client.send_file(event.chat_id, final_path)
@@ -322,9 +319,7 @@ async def handle_conversion_and_sending(event, format_choice, input_text, conten
             increment_download(event.chat_id, content_type)
             del state[event.chat_id]
 
-        # -------------------------------
         # TRACK MODE
-        # -------------------------------
         elif content_type == "track":
             download_dir = f'downloads/{components[-1]}'
             filename = os.listdir(download_dir)[0]
@@ -352,9 +347,6 @@ async def handle_conversion_and_sending(event, format_choice, input_text, conten
                 f"<b>\U0001F9E9 BPM:</b> {bpm}\n"
             )
 
-            # -----------------------------------------
-            # UPDATED: EMBEDDED COVER SUPPORT (TRACK)
-            # -----------------------------------------
             embedded_cover_data, embedded_ext = extract_embedded_cover(filepath)
             if embedded_cover_data:
                 cover_path = f"{download_dir}/embedded_cover.{embedded_ext}"
@@ -367,15 +359,11 @@ async def handle_conversion_and_sending(event, format_choice, input_text, conten
                     if f.lower().startswith('cover') and f.lower().endswith(('.jpg', '.jpeg', '.png')):
                         cover_file = os.path.join(download_dir, f)
                         break
-
                 if cover_file:
                     await client.send_file(event.chat_id, cover_file, caption=caption, parse_mode='html')
                 else:
                     await event.reply(caption, parse_mode='html')
 
-            # -------------------
-            # CONVERSION REMAINS SAME
-            # -------------------
             if format_choice == 'flac':
                 subprocess.run(['ffmpeg', '-n', '-i', filepath, converted_filepath])
                 audio = File(converted_filepath, easy=True)
@@ -385,7 +373,7 @@ async def handle_conversion_and_sending(event, format_choice, input_text, conten
                     if field in audio:
                         audio[field] = [value.replace(";", ", ") for value in audio[field]]
                 audio.save()
-                new_filename = safe_filename(f"{artist} - {title}.{format_choice}".replace(";", ", "))
+                new_filename = safe_filename(f"{artist} - {title}.{format_choice}")
                 new_filepath = f'{download_dir}/{new_filename}'
                 os.rename(converted_filepath, new_filepath)
                 await client.send_file(event.chat_id, new_filepath)
@@ -399,7 +387,7 @@ async def handle_conversion_and_sending(event, format_choice, input_text, conten
                     if field in audio:
                         audio[field] = [value.replace(";", ", ") for value in audio[field]]
                 audio.save()
-                new_filename = safe_filename(f"{artist} - {title}.{format_choice}".replace(";", ", "))
+                new_filename = safe_filename(f"{artist} - {title}.{format_choice}")
                 new_filepath = f'{download_dir}/{new_filename}'
                 os.rename(converted_filepath, new_filepath)
                 await client.send_file(event.chat_id, new_filepath)
@@ -422,6 +410,11 @@ async def handle_conversion_and_sending(event, format_choice, input_text, conten
     except Exception as e:
         await event.reply(f"An error occurred during conversion: {e}")
 
+    finally:
+        # RELEASE USER DOWNLOAD LOCK
+        if active_downloads.get(event.chat_id):
+            del active_downloads[event.chat_id]
+                    
 # === START HANDLER WITH IMAGE & BUTTONS ===
 @client.on(events.NewMessage(pattern='/start'))
 async def start_handler(event):
@@ -556,7 +549,6 @@ async def myaccount_handler(event):
 
         await event.reply(message, buttons=buttons, parse_mode="markdown")
 
-
 # === AUTO-DETECT BEATPORT LINKS (DIRECT TRIGGER) ===
 @client.on(events.NewMessage())
 async def direct_link_trigger(event):
@@ -577,6 +569,13 @@ async def direct_link_trigger(event):
 
     user_id = event.chat_id
 
+    # -------- ACTIVE DOWNLOAD CHECK --------
+    if active_downloads.get(user_id, False):
+        await event.reply("❌ You already have an ongoing download. Please wait for it to finish.")
+        return
+    active_downloads[user_id] = True
+    # ---------------------------------------
+
     # Determine type
     if is_album:
         content_type = "album"
@@ -595,6 +594,7 @@ async def direct_link_trigger(event):
         expiry = user.get("expiry")
 
         if not expiry or datetime.strptime(expiry, "%Y-%m-%d") <= datetime.utcnow():
+            active_downloads[user_id] = False  # RELEASE LOCK
             await event.reply(
                 "🚫 Playlist & chart downloads are only for **Premium users**.\n"
                 "Unlock full access for just **$5**!",
@@ -604,6 +604,7 @@ async def direct_link_trigger(event):
 
     # Daily limits for free users
     if content_type in ["album", "track"] and not is_user_allowed(user_id, content_type):
+        active_downloads[user_id] = False  # RELEASE LOCK
         await event.reply(
             "🚫 **Daily Limit Reached!**\n\n"
             "👉 Upgrade to **Premium ($5)** for **unlimited downloads** and send the payment proof to @zackantdev",
@@ -618,75 +619,12 @@ async def direct_link_trigger(event):
     await event.reply(
         "Please choose the format:",
         buttons=[
-            [Button.inline("MP3 (320 kbps)", b"mp3"),
+            [Button.inline(" 🎵 FLACC (320 kbps)", b"mp3"),
              Button.inline("FLAC (16 Bit)", b"flac")],
             [Button.inline("WAV (Lossless)", b"wav")]
         ]
     )
 
-@client.on(events.NewMessage(pattern='/download'))
-async def download_handler(event):
-    try:
-        user_id = event.chat_id
-        input_text = event.message.text.split(maxsplit=1)[1].strip()
-
-        # Check type of Beatport link
-        is_track = re.match(beatport_track_pattern, input_text)
-        is_album = re.match(beatport_album_pattern, input_text)
-        is_playlist = re.match(beatport_playlist_pattern, input_text)
-        is_chart = re.match(beatport_chart_pattern, input_text)
-
-        if is_track or is_album or is_playlist or is_chart:
-            # Determine content type
-            if is_album:
-                content_type = "album"
-            elif is_track:
-                content_type = "track"
-            elif is_playlist:
-                content_type = "playlist"
-            elif is_chart:
-                content_type = "chart"
-
-            # Restrict playlists/charts to whitelisted users
-            if content_type in ["playlist", "chart"]:
-                users = load_users()
-                user = users.get(str(user_id), {})
-                reset_if_needed(user)
-                expiry = user.get("expiry")
-                if not expiry or datetime.strptime(expiry, "%Y-%m-%d") <= datetime.utcnow():
-                    await event.reply(
-                        "🚫 Playlist and chart downloads are available only for premium users.\n"
-                        "Please support with a $5 payment to unlock playlist & chart downloading",
-                        buttons=[Button.url("💳 Pay $5", PAYMENT_URL)]
-                    )
-                    return
-
-            # Check daily limits for free users
-            if content_type in ["album", "track"] and not is_user_allowed(user_id, content_type):
-                await event.reply(
-                    "🚫 **Daily Limit Reached!**\n\n"
-                    "👉 Upgrade to **Premium ($5)** for **unlimited downloads** and send the payment proof to @zackantdev",
-                    buttons=[
-                        [Button.url("💳 Pay $5 Here", PAYMENT_URL)],
-                        
-                    ]
-                )
-                return
-
-            # Save state and ask format
-            state[event.chat_id] = {"url": input_text, "type": content_type}
-            await event.reply(
-                "Please choose the format:",
-                buttons=[
-                    [Button.inline("MP3 (320 kbps)", b"mp3"), Button.inline("FLAC (16 Bit)", b"flac")],
-                    [Button.inline("WAV (Lossless)", b"wav")]
-                ]
-            )
-        else:
-            await event.reply('Not available')
-    except Exception as e:
-        await event.reply(f"An error occurred: {e}")
-            
 @client.on(events.CallbackQuery)
 async def callback_query_handler(event):
     try:
