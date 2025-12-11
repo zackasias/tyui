@@ -462,7 +462,75 @@ async def myaccount_handler(event):
         ]
 
         await event.reply(message, buttons=buttons, parse_mode="markdown")
-        
+
+
+# === AUTO-DETECT BEATPORT LINKS (DIRECT TRIGGER) ===
+@client.on(events.NewMessage())
+async def direct_link_trigger(event):
+    text = event.message.message.strip()
+
+    # Ignore commands to avoid interfering
+    if text.startswith("/"):
+        return
+
+    # Detect Beatport links
+    is_track = re.match(beatport_track_pattern, text)
+    is_album = re.match(beatport_album_pattern, text)
+    is_playlist = re.match(beatport_playlist_pattern, text)
+    is_chart = re.match(beatport_chart_pattern, text)
+
+    if not (is_track or is_album or is_playlist or is_chart):
+        return  # Not a supported link → ignore message
+
+    user_id = event.chat_id
+
+    # Determine type
+    if is_album:
+        content_type = "album"
+    elif is_track:
+        content_type = "track"
+    elif is_playlist:
+        content_type = "playlist"
+    elif is_chart:
+        content_type = "chart"
+
+    # Premium check for playlist / chart
+    if content_type in ["playlist", "chart"]:
+        users = load_users()
+        user = users.get(str(user_id), {})
+        reset_if_needed(user)
+        expiry = user.get("expiry")
+
+        if not expiry or datetime.strptime(expiry, "%Y-%m-%d") <= datetime.utcnow():
+            await event.reply(
+                "🚫 Playlist & chart downloads are only for **Premium users**.\n"
+                "Unlock full access for just **$5**!",
+                buttons=[[Button.url("💳 Pay $5", PAYMENT_URL)]]
+            )
+            return
+
+    # Daily limits for free users
+    if content_type in ["album", "track"] and not is_user_allowed(user_id, content_type):
+        await event.reply(
+            "🚫 **Daily Limit Reached!**\n"
+            "Upgrade to **Premium ($5)** to continue downloading.",
+            buttons=[[Button.url("💳 Pay $5 Here", PAYMENT_URL)]]
+        )
+        return
+
+    # Save the request just like /download does
+    state[event.chat_id] = {"url": text, "type": content_type}
+
+    # Ask the format (same buttons as /download)
+    await event.reply(
+        "Please choose the format:",
+        buttons=[
+            [Button.inline("MP3 (320 kbps)", b"mp3"),
+             Button.inline("FLAC (16 Bit)", b"flac")],
+            [Button.inline("WAV (Lossless)", b"wav")]
+        ]
+    )
+
 @client.on(events.NewMessage(pattern='/download'))
 async def download_handler(event):
     try:
