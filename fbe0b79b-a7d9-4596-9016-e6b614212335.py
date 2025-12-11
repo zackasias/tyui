@@ -614,7 +614,7 @@ async def direct_link_trigger(event):
     if content_type in ["album", "track"] and not is_user_allowed(user_id, content_type):
         await event.reply(
             "🚫 **Daily Limit Reached!**\n\n"
-            "👉 Upgrade to **Premium ($5)** for **downloads** downloads and send the payment proof to @zackantdev",
+            "👉 Upgrade to **Premium ($5)dounlimitednpaymentnlimited unlimited** and send the payment proof to @zackantdev",
             buttons=[[Button.url("💳 Pay $5 Here", PAYMENT_URL)]]
         )
         return
