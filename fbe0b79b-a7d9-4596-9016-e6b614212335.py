@@ -172,15 +172,15 @@ async def handle_conversion_and_sending(event, format_choice, input_text, conten
 
             # Metadata aggregation
             all_artists = "Various Artists" if content_type in ["playlist", "chart"] else set()
-            genres, labels, dates, bpms = set(), set(), [], []
+            genres, labels, dates, bpms, keys = set(), set(), [], [], set()
 
             for f in flac_files:
                 audio = File(f, easy=True)
                 if audio:
                     if content_type not in ["playlist", "chart"]:
-                        for key in ('artist', 'performer', 'albumartist'):
-                            if key in audio:
-                                all_artists.update(audio[key])
+                        for key_field in ('artist', 'performer', 'albumartist'):
+                            if key_field in audio:
+                                all_artists.update(audio[key_field])
                     if 'genre' in audio: genres.update(audio['genre'])
                     if 'label' in audio: labels.update(audio['label'])
                     if 'date' in audio:
@@ -191,6 +191,8 @@ async def handle_conversion_and_sending(event, format_choice, input_text, conten
                     if 'bpm' in audio:
                         try: bpms.append(float(audio['bpm'][0]))
                         except: pass
+                    if 'initialkey' in audio: keys.update(audio['initialkey'])
+                    elif 'key' in audio: keys.update(audio['key'])
 
             if content_type not in ["playlist", "chart"]:
                 artists_str = ", ".join(sorted(all_artists)) or "Various Artists"
@@ -199,6 +201,7 @@ async def handle_conversion_and_sending(event, format_choice, input_text, conten
 
             genre_str = ", ".join(sorted(genres)) if genres else "Unknown Genre"
             label_str = ", ".join(sorted(labels)) if labels else "--"
+            key_str = ", ".join(sorted(keys)) if keys else "--"
             date_str = f"{min(dates).strftime('%Y-%m-%d')} - {max(dates).strftime('%Y-%m-%d')}" if len(dates) > 1 else dates[0].strftime('%Y-%m-%d') if dates else "--"
             bpm_str = f"{int(min(bpms))}-{int(max(bpms))}" if len(bpms) > 1 else str(int(bpms[0])) if bpms else "--"
 
@@ -212,6 +215,7 @@ async def handle_conversion_and_sending(event, format_choice, input_text, conten
                 f"<b>\U0001F464 Artists:</b> {artists_str}\n"
                 f"<b>\U0001F3A7 Genre:</b> {genre_str}\n"
                 f"<b>\U0001F4BF Label:</b> {label_str}\n"
+                f"<b>\U0001F3B9 Key:</b> {key_str}\n"
                 f"<b>\U0001F4C5 Release Date:</b> {date_str}\n"
                 f"<b>\U0001F9E9 BPM:</b> {bpm_str}\n"
             )
@@ -260,7 +264,6 @@ async def handle_conversion_and_sending(event, format_choice, input_text, conten
                     os.rename(output_path, final_path)
                     await client.send_file(event.chat_id, final_path)
 
-                # WAV conversion (send as document)
                 elif format_choice == 'wav':
                     subprocess.run(['ffmpeg', '-n', '-i', input_path, output_path])
                     original_audio = File(input_path, easy=True)
@@ -281,6 +284,39 @@ async def handle_conversion_and_sending(event, format_choice, input_text, conten
             filename = os.listdir(download_dir)[0]
             filepath = f'{download_dir}/{filename}'
             converted_filepath = f'{download_dir}/{filename}.{format_choice}'
+
+            # --- Track caption with Key ---
+            audio = File(filepath, easy=True) or {}
+            title_name = audio.get('title', ['Unknown Title'])[0]
+            artists = ", ".join(audio.get('artist', ['Unknown Artist']))
+            genre = ", ".join(audio.get('genre', ['Unknown Genre']))
+            album = audio.get('album', ['--'])[0]
+            label = ", ".join(audio.get('label', ['--']))
+            date = audio.get('date', ['--'])[0]
+            bpm = str(int(float(audio['bpm'][0]))) if 'bpm' in audio else '--'
+            key_str = audio.get('initialkey', audio.get('key', ['--']))[0]
+
+            caption = (
+                f"<b>\U0001F3B5 Track:</b> {title_name}\n"
+                f"<b>\U0001F464 Artist:</b> {artists}\n"
+                f"<b>\U0001F3A7 Genre:</b> {genre}\n"
+                f"<b>\U0001F4BF Album:</b> {album}\n"
+                f"<b>\U0001F3B9 Key:</b> {key_str}\n"
+                f"<b>\U0001F4BF Label:</b> {label}\n"
+                f"<b>\U0001F4C5 Release Date:</b> {date}\n"
+                f"<b>\U0001F9E9 BPM:</b> {bpm}\n"
+            )
+
+            # Send cover if exists
+            cover_file = None
+            for f in os.listdir(download_dir):
+                if f.lower().startswith('cover') and f.lower().endswith(('.jpg', '.jpeg', '.png')):
+                    cover_file = os.path.join(download_dir, f)
+                    break
+            if cover_file:
+                await client.send_file(event.chat_id, cover_file, caption=caption, parse_mode='html')
+            else:
+                await event.reply(caption, parse_mode='html')
 
             if format_choice == 'flac':
                 subprocess.run(['ffmpeg', '-n', '-i', filepath, converted_filepath])
@@ -310,7 +346,6 @@ async def handle_conversion_and_sending(event, format_choice, input_text, conten
                 os.rename(converted_filepath, new_filepath)
                 await client.send_file(event.chat_id, new_filepath)
 
-            # WAV conversion (send as document)
             elif format_choice == 'wav':
                 subprocess.run(['ffmpeg', '-n', '-i', filepath, converted_filepath])
                 original_audio = File(filepath, easy=True)
