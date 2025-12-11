@@ -59,9 +59,9 @@ def is_user_allowed(user_id, content_type):
     if user.get('expiry'):
         if datetime.strptime(user['expiry'], '%Y-%m-%d') > datetime.utcnow():
             return True
-    if content_type == 'album' and user.get("album_today", 0) >= 1:
+    if content_type == 'album' and user.get("album_today", 0) >= 2:
         return False
-    if content_type == 'track' and user.get("track_today", 0) >= 1:
+    if content_type == 'track' and user.get("track_today", 0) >= 2:
         return False
     return True
 
@@ -451,8 +451,8 @@ async def myaccount_handler(event):
         track_used = user.get("track_today", 0)
         message = (
             f"🎧 **Free User**\n\n"
-            f"🎵 **Tracks used today:** {track_used}/1\n"
-            f"💿 **Albums used today:** {album_used}/1\n"
+            f"🎵 **Tracks used today:** {track_used}/2\n"
+            f"💿 **Albums used today:** {album_used}/2\n"
             f"📅 **Reset every 24 hours**\n\n"
             f"🔥 Upgrade to **Premium ($5)** for unlimited downloads!"
         )
@@ -504,9 +504,7 @@ async def download_handler(event):
             if content_type in ["album", "track"] and not is_user_allowed(user_id, content_type):
                 await event.reply(
                     "🚫 **Daily Limit Reached!**\n\n"
-                    "💿 Free users can download up to **1 album** & **1 track** every 24 hours.\n\n"
-                    "✨ Want **unlimited downloads** for 30 days?\n"
-                    "👉 Support the project with just **$5** and send payment proof to @zackantdev",
+                    "👉 Upgrade to **Premium ($5)** for **downloads** downloads and send the payment proof to @zackantdev",
                     buttons=[
                         [Button.url("💳 Pay $5 Here", PAYMENT_URL)],
                         
