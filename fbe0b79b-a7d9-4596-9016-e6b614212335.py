@@ -19,8 +19,8 @@ api_hash = 'a08b1ed3365fa3b04bcf2bcbf71aff4d'
 session_name = 'beatport_downloader'
 
 
-beatport_track_pattern    = r'^https:\/\/www\.beatport\.com(?:\/[a-z]{2})?\/track\/[\w\-]+\/\d+(?:\?.*)?$'
-beatport_album_pattern    = r'^https:\/\/www\.beatport\.com(?:\/[a-z]{2})?\/release\/[\w\-]+\/\d+(?:\?.*)?$'
+beatport_track_pattern = r'^https:\/\/(?:www\.)?beatport\.com(?:\/[a-z]{2})?\/track\/[A-Za-z0-9%\-\(\)\._]+\/\d+(?:\?.*)?$'
+beatport_album_pattern = r'^https:\/\/(?:www\.)?beatport\.com(?:\/[a-z]{2})?\/release\/[A-Za-z0-9%\-\(\)\._]+\/\d+(?:\?.*)?$'
 beatport_playlist_pattern = r'^https:\/\/www\.bert\.com(?:\/[a-z]{2})?\/(library\/playlists|playlists\/share)\/\d+(?:\?.*)?$'
 beatport_chart_pattern    = r'^https:\/\/www\.port\.com(?:\/[a-z]{2})?\/chart\/[\w\-]+\/\d+(?:\?.*)?$'
 
