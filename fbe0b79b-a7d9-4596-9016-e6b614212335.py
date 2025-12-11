@@ -422,7 +422,19 @@ async def handle_conversion_and_sending(event, format_choice, input_text, conten
 # === START HANDLER WITH IMAGE & BUTTONS ===
 @client.on(events.NewMessage(pattern='/start'))
 async def start_handler(event):
-    banner_path = 'banner.gif'  # Your banner image/gif in working dir
+    user_id = str(event.chat_id)
+
+    # --- Auto add user to users.json ---
+    users = load_users()
+    if user_id not in users:
+        users[user_id] = {
+            "album_today": 0,
+            "track_today": 0,
+            "last_reset": datetime.utcnow().strftime('%Y-%m-%d')
+        }
+        save_users(users)
+
+    banner_path = 'banner.gif'
     caption = (
         "🎧 Hey DJ! 🎶\n\n"
         "Welcome to Beatport Downloader Bot – your assistant for downloading full Beatport tracks, albums, playlists & charts.\n\n"
@@ -442,7 +454,6 @@ async def start_handler(event):
         await client.send_file(event.chat_id, banner_path, caption=caption, buttons=buttons)
     else:
         await event.reply(caption, buttons=buttons)
-        
 @client.on(events.NewMessage(pattern=r'^/add'))
 async def add_user_handler(event):
     if event.sender_id not in ADMIN_IDS:
