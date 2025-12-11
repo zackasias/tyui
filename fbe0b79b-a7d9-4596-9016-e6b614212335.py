@@ -341,10 +341,10 @@ async def handle_conversion_and_sending(event, format_choice, input_text, conten
             caption = (
                 f"<b>\U0001F3B5 Track:</b> {title_name}\n"
                 f"<b>\U0001F464 Artist:</b> {artists}\n"
-                f"<b>\U0001F3A7 Genre:</b> {genre}\n"
-                f"<b>\U0001F4BF Album:</b> {album}\n"
+                f"<b>📻 Genre:</b> {genre}\n"
+                f"<b>💽 Album:</b> {album}\n"
                 f"<b>\U0001F3B9 Key:</b> {key_str}\n"
-                f"<b>\U0001F4BF Label:</b> {label}\n"
+                f"<b>🏷️ Label:</b> {label}\n"
                 f"<b>\U0001F4C5 Release Date:</b> {date}\n"
                 f"<b>\U0001F9E9 BPM:</b> {bpm}\n"
             )
