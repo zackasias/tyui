@@ -26,7 +26,7 @@ beatport_chart_pattern    = r'^https:\/\/www\.port\.com(?:\/[a-z]{2})?\/chart\/[
 beatport_track_pattern = r'^https:\/\/(?:www\.)?beatport\.com(?:\/[a-z]{2})?\/track\/[A-Za-z0-9%\-\(\)\._]+\/\d+(?:\?.*)?$'
 beatport_album_pattern = r'^https:\/\/(?:www\.)?beatport\.com(?:\/[a-z]{2})?\/release\/[A-Za-z0-9%\-\(\)\._]+\/\d+(?:\?.*)?$'
 
-
+active_downloads = {}
 state = {}
 ADMIN_IDS = [616584208]
 PAYMENT_URL = "https://ko-fi.com/zackant"
