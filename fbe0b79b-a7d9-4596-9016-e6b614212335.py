@@ -243,8 +243,8 @@ async def handle_conversion_and_sending(event, format_choice, input_text, conten
             caption = (
                 f"<b>\U0001F3B6 {content_type.capitalize()}:</b> {title_name}\n"
                 f"<b>\U0001F464 Artists:</b> {artists_str}\n"
-                f"<b>\U0001F3A7 Genre:</b> {genre_str}\n"
-                f"<b>\U0001F4BF Label:</b> {label_str}\n"
+                f"<b>📻 Genre:</b> {genre_str}\n"
+                f"<b>🏷️ Label:</b> {label_str}\n"
                 f"<b>\U0001F3B9 Key:</b> {key_str}\n"
                 f"<b>\U0001F4C5 Release Date:</b> {date_str}\n"
                 f"<b>\U0001F9E9 BPM:</b> {bpm_str}\n"
