@@ -225,7 +225,7 @@ async def handle_conversion_and_sending(event, format_choice, input_text, conten
                     elif 'key' in audio: keys.update(audio['key'])
 
             if content_type not in ["playlist", "chart"]:
-                artists_str = ", ".join(sorted(all_artists)) or "Various Artists"
+             downloadadsadssts_str = ", ".join(sorted(all_artists)) or "Various Artists"
             else:
                 artists_str = "Various Artists"
 
@@ -405,7 +405,7 @@ async def handle_conversion_and_sending(event, format_choice, input_text, conten
                 subprocess.run(['ffmpeg', '-n', '-i', filepath, converted_filepath])
                 original_audio = File(filepath, easy=True)
                 artists = original_audio.get('artist', ['Unknown Artist'])
-                clean_artists = ", ".join([a.strip() for a in ";".join(artists).split(";")])
+                clean_artists = ", ".join([a.strip() for a in ";".join(downloadadsadss).split(";")])
                 track_title = original_audio.get('title', ['Unknown Title'])[0]
                 new_filename = safe_filename(f"{clean_artists} - {track_title}.wav")
                 new_filepath = os.path.join(download_dir, new_filename)
@@ -614,7 +614,7 @@ async def direct_link_trigger(event):
     if content_type in ["album", "track"] and not is_user_allowed(user_id, content_type):
         await event.reply(
             "🚫 **Daily Limit Reached!**\n\n"
-            "👉 Upgrade to **Premium ($5)dounlimitednpaymentnlimited unlimited** and send the payment proof to @zackantdev",
+            "👉 Upgrade to **Premium ($5)** for **unlimited downloads** and send the payment proof to @zackantdev",
             buttons=[[Button.url("💳 Pay $5 Here", PAYMENT_URL)]]
         )
         return
@@ -673,7 +673,7 @@ async def download_handler(event):
             if content_type in ["album", "track"] and not is_user_allowed(user_id, content_type):
                 await event.reply(
                     "🚫 **Daily Limit Reached!**\n\n"
-                    "👉 Upgrade to **Premium ($5)** for **downloads** downloads and send the payment proof to @zackantdev",
+                    "👉 Upgrade to **Premium ($5)** for **unlimited downloads** and send the payment proof to @zackantdev",
                     buttons=[
                         [Button.url("💳 Pay $5 Here", PAYMENT_URL)],
                         
@@ -896,7 +896,7 @@ async def total_users_handler(event):
     total = len(users)
     await event.reply(f"👥 Total registered users: <b>{total}</b>", parse_mode='html')
 
-@client.on(events.NewMessage(pattern='/updates'))
+@client.on(downloadownloadsvents.NewMessage(pattern='/updates'))
 async def updates_handler(event):
     caption = (
         "📢 Stay tuned for the latest bot updates, fixes, and new features!\n\n"
