@@ -612,6 +612,8 @@ async def admin_list_handler(event):
         except Exception:
             lines.append(f"• <code>{admin_id}</code> – [Could not fetch username]")
     await event.reply("\n".join(lines), parse_mode='html')
+
+
 @client.on(events.NewMessage(pattern=r'^/whitelist$'))
 async def whitelist_handler(event):
     if event.sender_id not in ADMIN_IDS:
@@ -643,21 +645,37 @@ async def whitelist_handler(event):
         await event.reply("💎 No active Premium users found.")
         return
 
-    # Build pages (~25 users per page)
+    total_count = len(premium_users)
+
+    # Pagination (25 per page)
     page_size = 25
     pages = []
 
-    for i in range(0, len(premium_users), page_size):
+    for i in range(0, total_count, page_size):
         chunk = premium_users[i:i + page_size]
-        text = "💎 **Premium Users List**\n"
-        text += f"📄 Page {len(pages)+1}\n\n"
+
+        # Page header
+        if len(pages) == 0:
+            # Only FIRST PAGE shows total count
+            text = (
+                f"💎 **Total Premium Users: {total_count}**\n"
+                f"📄 Page {len(pages) + 1}\n\n"
+            )
+        else:
+            text = f"📄 Page {len(pages) + 1}\n\n"
+
+        # Add users for this page
         for uid, username, expiry in chunk:
             text += f"👤 `{uid}` — {username}\n📆 Expires: {expiry}\n\n"
+
         pages.append(text.strip())
 
-    # Save pages for pagination
-    WHITELIST_PAGES[event.sender_id] = {"pages": pages, "current": 0}
+    WHITELIST_PAGES[event.sender_id] = {
+        "pages": pages,
+        "current": 0,
+    }
 
+    # Buttons
     buttons = [
         [Button.inline("➡️ Next", data="wl_next")]
     ] if len(pages) > 1 else None
@@ -682,22 +700,25 @@ async def whitelist_pagination(event):
     if action == "next":
         if session["current"] < len(session["pages"]) - 1:
             session["current"] += 1
+
     elif action == "prev":
         if session["current"] > 0:
             session["current"] -= 1
 
+    page_index = session["current"]
+
+    # Build buttons dynamically
     buttons = []
-    if session["current"] > 0:
+    if page_index > 0:
         buttons.append(Button.inline("⬅️ Previous", data="wl_prev"))
-    if session["current"] < len(session["pages"]) - 1:
+    if page_index < len(session["pages"]) - 1:
         buttons.append(Button.inline("➡️ Next", data="wl_next"))
 
     await event.edit(
-        session["pages"][session["current"]],
+        session["pages"][page_index],
         parse_mode="markdown",
         buttons=[buttons] if buttons else None
     )
-
 # === NEW COMMAND: /totalusers ===
 @client.on(events.NewMessage(pattern='/totalusers'))
 async def total_users_handler(event):
