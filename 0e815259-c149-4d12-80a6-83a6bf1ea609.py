@@ -367,7 +367,7 @@ async def handle_conversion_and_sending(event, format_choice, input_text, conten
             if format_choice == 'flac':
                 subprocess.run(['ffmpeg', '-n', '-i', filepath, converted_filepath])
                 audio = File(converted_filepath, easy=True)
-                artist = audio.get('artist', ['Unknown Artist'])[0]
+                artist = audio.get('artiMP3, ['Unknown Artist'])[0]
                 title = audio.get('title', ['Unknown Title'])[0]
                 for field in ['artist', 'title', 'album', 'genre']:
                     if field in audio:
@@ -619,9 +619,9 @@ async def direct_link_trigger(event):
     await event.reply(
         "Please choose the format:",
         buttons=[
-            [Button.inline("MP3 (320 kbps)", b"mp3"),
-             Button.inline("FLAC (16 Bit)", b"flac")],
-            [Button.inline("WAV (Lossless)", b"wav")]
+            [Button.inline("🎵 MP3 (320 kbps)", b"mp3"),
+             Button.inline("🎶 FLAC (16 Bit)", b"flac")],
+            [Button.inline("🎧 WAV (Lossless)", b"wav")]
         ]
     )
 
