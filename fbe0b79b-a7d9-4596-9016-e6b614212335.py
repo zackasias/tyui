@@ -30,6 +30,35 @@ PAYMENT_URL = "https://ko-fi.com/zackant"
 USERS_FILE = 'users.json'
 WHITELIST_PAGES = {}
 
+
+def extract_embedded_cover(filepath):
+    """
+    Returns (bytes, extension) if embedded artwork exists.
+    Otherwise returns (None, None).
+    """
+    try:
+        audio = File(filepath)
+
+        # FLAC
+        if filepath.lower().endswith(".flac"):
+            if hasattr(audio, "pictures") and audio.pictures:
+                pic = audio.pictures[0]
+                ext = pic.mime.split("/")[-1]
+                return pic.data, ext
+
+        # MP3
+        if filepath.lower().endswith(".mp3"):
+            if audio.tags:
+                for tag in audio.tags.values():
+                    if tag.FrameID == "APIC":
+                        ext = tag.mime.split("/")[-1]
+                        return tag.data, ext
+
+        return None, None
+    except:
+        return None, None
+
+
 def safe_filename(name: str) -> str:
     return re.sub(r'[\/:*?"<>|]', '_', name)
 
@@ -138,6 +167,8 @@ async def process_queue():
             orpheus_queue.task_done()
 
     orpheus_running = False
+
+
 
 async def handle_conversion_and_sending(event, format_choice, input_text, content_type):
     try:
