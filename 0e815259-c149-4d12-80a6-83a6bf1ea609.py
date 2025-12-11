@@ -688,9 +688,9 @@ async def download_handler(event):
             await event.reply(
                 "Please choose the format:",
                 buttons=[
-                    [Button.inline("MP3 (320 kbps)", b"mp3"),
-                     Button.inline("FLAC (16 Bit)", b"flac")],
-                    [Button.inline("WAV (Lossless)", b"wav")]
+                    [Button.inline("🎵 MP3 (320 kbps)", b"mp3"),
+                     Button.inline("🎶 FLAC (16 Bit)", b"flac")],
+                    [Button.inline("🎧 WAV (Lossless)", b"wav")]
                 ]
             )
         else:
